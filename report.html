@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    toggle_sort_states(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+    var multiplier = reversed ? -1 : 1;
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+        return multiplier * (key_a >= key_b ? 1 : -1);
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>report.html</h1>
+    <p>Report generated on 06-Dec-2018 at 15:33:48 by<a href="https://pypi.python.org/pypi/pytest-html"> pytest-html</a> v1.19.0</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Packages</td>
+        <td>{&apos;pytest&apos;: &apos;4.0.1&apos;, &apos;py&apos;: &apos;1.7.0&apos;, &apos;pluggy&apos;: &apos;0.8.0&apos;}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Windows-8.1-6.3.9600-SP0</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{&apos;mock&apos;: &apos;1.10.0&apos;, &apos;metadata&apos;: &apos;1.7.0&apos;, &apos;html&apos;: &apos;1.19.0&apos;, &apos;flask&apos;: &apos;0.14.0&apos;, &apos;easy-api&apos;: &apos;0.0.3&apos;}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.6.5</td></tr></table>
+    <h2>Summary</h2>
+    <p>5 tests ran in 17.56 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">5 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">0 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">matilda_release/test/functional_testing/test_service.py::test_get_service</td>
+          <td class="col-duration">15.03</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">----------------------------- Captured stdout call -----------------------------<br/>Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT service.service_id AS service_service_id, service.name AS service_name, service.category AS service_category, service.comments AS service_comments 
+FROM service
+service list [&lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab1715f8] {service_id=1,name=&#x27;AgileCentral&#x27;,category=&#x27;Tracking&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab171668] {service_id=2,name=&#x27;Ansible&#x27;,category=&#x27;Execution&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab1716d8] {service_id=3,name=&#x27;Bamboo&#x27;,category=&#x27;Tracking&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab171748] {service_id=4,name=&#x27;CloudFormation Template&#x27;,category=&#x27;Cloud Management&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab1717b8] {service_id=5,name=&#x27;CHECKMARX&#x27;,category=&#x27;Tracking&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab171828] {service_id=6,name=&#x27;Docker&#x27;,category=&#x27;Container Platform&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab171898] {service_id=7,name=&#x27;Git&#x27;,category=&#x27;Version Control&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab171908] {service_id=8,name=&#x27;JBoss&#x27;,category=&#x27;Middleware&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab171978] {service_id=9,name=&#x27;Jenkins&#x27;,category=&#x27;Execution&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab1719e8] {service_id=10,name=&#x27;JIRA&#x27;,category=&#x27;Tracking&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab171a58] {service_id=11,name=&#x27;JMETER&#x27;,category=&#x27;Execution&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab171b00] {service_id=12,name=&#x27;Kubernetes&#x27;,category=&#x27;Container Platform&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab171ba8] {service_id=13,name=&#x27;Linux Script&#x27;,category=&#x27;Execution&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab171c50] {service_id=14,name=&#x27;Maven&#x27;,category=&#x27;Container Platform&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab171cf8] {service_id=15,name=&#x27;MongoDB&#x27;,category=&#x27;Database&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab171da0] {service_id=16,name=&#x27;MySQL&#x27;,category=&#x27;Database&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab171e48] {service_id=17,name=&#x27;Oracle&#x27;,category=&#x27;Database&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab171ef0] {service_id=18,name=&#x27;PostgreSQL&#x27;,category=&#x27;Database&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab171f98] {service_id=19,name=&#x27;REST WebHook&#x27;,category=&#x27;Web Hook&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab178080] {service_id=20,name=&#x27;ServiceNow&#x27;,category=&#x27;Tracking&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab178128] {service_id=21,name=&#x27;SonarQube&#x27;,category=&#x27;Code Quality&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab1781d0] {service_id=22,name=&#x27;StaticCode Analysis&#x27;,category=&#x27;Code Quality&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab178278] {service_id=23,name=&#x27;SVN&#x27;,category=&#x27;Version Control&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab178320] {service_id=24,name=&#x27;Terraform&#x27;,category=&#x27;Cloud Management&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab1783c8] {service_id=25,name=&#x27;Tomcat&#x27;,category=&#x27;Middleware&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab178470] {service_id=26,name=&#x27;WebLogic&#x27;,category=&#x27;Middleware&#x27;,comments=&#x27;1.0;Matilda&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab178518] {service_id=27,name=&#x27;mex_stringv&#x27;,category=&#x27;max_stringv&#x27;,comments=&#x27;max_stringv&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab1785c0] {service_id=28,name=&#x27;mex_stringv&#x27;,category=&#x27;max_stringv&#x27;,comments=&#x27;max_stringv&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab178668] {service_id=29,name=&#x27;mex_stringv&#x27;,category=&#x27;max_stringv&#x27;,comments=&#x27;max_stringv&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab178710] {service_id=30,name=&#x27;mex_stringv&#x27;,category=&#x27;msax_stringv&#x27;,comments=&#x27;max_stringv&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab1787b8] {service_id=31,name=&#x27;mex_stringv&#x27;,category=&#x27;max_stringv&#x27;,comments=&#x27;max_stringv&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab178860] {service_id=32,name=&#x27;mex_stringv&#x27;,category=&#x27;max_stringv&#x27;,comments=&#x27;max_stringv&#x27;}&gt;, &lt;matilda_release.db.sqlalchemy.models.Service[object at 74ab178908] {service_id=33,name=&#x27;mex_stringv&#x27;,category=&#x27;max_stringv&#x27;,comments=&#x27;max_stringv&#x27;}&gt;]
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.service_id = %s
+Service resp [{&#x27;name&#x27;: &#x27;Tracking&#x27;, &#x27;services&#x27;: [{&#x27;service_id&#x27;: 1, &#x27;name&#x27;: &#x27;AgileCentral&#x27;, &#x27;category&#x27;: &#x27;Tracking&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 1, &#x27;name&#x27;: &#x27;project_data&#x27;, &#x27;description&#x27;: &#x27;Project Data&#x27;, &#x27;service_id&#x27;: 1}, {&#x27;action_id&#x27;: 2, &#x27;name&#x27;: &#x27;project_info&#x27;, &#x27;description&#x27;: &#x27;Project Info&#x27;, &#x27;service_id&#x27;: 1}, {&#x27;action_id&#x27;: 60, &#x27;name&#x27;: &#x27;mex_stringv&#x27;, &#x27;description&#x27;: None, &#x27;service_id&#x27;: 1}, {&#x27;action_id&#x27;: 61, &#x27;name&#x27;: &#x27;string&#x27;, &#x27;description&#x27;: &#x27;string&#x27;, &#x27;service_id&#x27;: 1}, {&#x27;action_id&#x27;: 62, &#x27;name&#x27;: &#x27;mex_stringv&#x27;, &#x27;description&#x27;: None, &#x27;service_id&#x27;: 1}, {&#x27;action_id&#x27;: 63, &#x27;name&#x27;: &#x27;mex_stringv&#x27;, &#x27;description&#x27;: None, &#x27;service_id&#x27;: 1}, {&#x27;action_id&#x27;: 64, &#x27;name&#x27;: &#x27;mex_stringv&#x27;, &#x27;description&#x27;: None, &#x27;service_id&#x27;: 1}, {&#x27;action_id&#x27;: 65, &#x27;name&#x27;: &#x27;mex_stringv&#x27;, &#x27;description&#x27;: None, &#x27;service_id&#x27;: 1}, {&#x27;action_id&#x27;: 66, &#x27;name&#x27;: &#x27;xwnew_string&#x27;, &#x27;description&#x27;: &#x27;xwnew_string&#x27;, &#x27;service_id&#x27;: 1}, {&#x27;action_id&#x27;: 67, &#x27;name&#x27;: &#x27;xwnew_string&#x27;, &#x27;description&#x27;: &#x27;xwnew_string&#x27;, &#x27;service_id&#x27;: 1}, {&#x27;action_id&#x27;: 68, &#x27;name&#x27;: &#x27;xwnew_string&#x27;, &#x27;description&#x27;: &#x27;xwnew_string&#x27;, &#x27;service_id&#x27;: 1}, {&#x27;action_id&#x27;: 69, &#x27;name&#x27;: &#x27;xwnew_string&#x27;, &#x27;description&#x27;: &#x27;xwnew_string&#x27;, &#x27;service_id&#x27;: 1}, {&#x27;action_id&#x27;: 70, &#x27;name&#x27;: &#x27;xwnew_string&#x27;, &#x27;description&#x27;: &#x27;xwnew_string&#x27;, &#x27;service_id&#x27;: 1}]}, {&#x27;service_id&#x27;: 3, &#x27;name&#x27;: &#x27;Bamboo&#x27;, &#x27;category&#x27;: &#x27;Tracking&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 4, &#x27;name&#x27;: &#x27;get_builds_by_label&#x27;, &#x27;description&#x27;: &#x27;Get Builds By Label&#x27;, &#x27;service_id&#x27;: 3}, {&#x27;action_id&#x27;: 5, &#x27;name&#x27;: &#x27;get_builds&#x27;, &#x27;description&#x27;: &#x27;Get Builds&#x27;, &#x27;service_id&#x27;: 3}, {&#x27;action_id&#x27;: 6, &#x27;name&#x27;: &#x27;get_deployments&#x27;, &#x27;description&#x27;: &#x27;Get Deployments&#x27;, &#x27;service_id&#x27;: 3}, {&#x27;action_id&#x27;: 7, &#x27;name&#x27;: &#x27;get_environment_results&#x27;, &#x27;description&#x27;: &#x27;Get Environment Results&#x27;, &#x27;service_id&#x27;: 3}, {&#x27;action_id&#x27;: 8, &#x27;name&#x27;: &#x27;get_plans&#x27;, &#x27;description&#x27;: &#x27;Get Plans&#x27;, &#x27;service_id&#x27;: 3}, {&#x27;action_id&#x27;: 9, &#x27;name&#x27;: &#x27;get_branches&#x27;, &#x27;description&#x27;: &#x27;Get Branches&#x27;, &#x27;service_id&#x27;: 3}, {&#x27;action_id&#x27;: 10, &#x27;name&#x27;: &#x27;delete_plan&#x27;, &#x27;description&#x27;: &#x27;Delete Plan&#x27;, &#x27;service_id&#x27;: 3}, {&#x27;action_id&#x27;: 11, &#x27;name&#x27;: &#x27;queue_build&#x27;, &#x27;description&#x27;: &#x27;Queue Build&#x27;, &#x27;service_id&#x27;: 3}, {&#x27;action_id&#x27;: 12, &#x27;name&#x27;: &#x27;continue_build&#x27;, &#x27;description&#x27;: &#x27;Continue Build&#x27;, &#x27;service_id&#x27;: 3}, {&#x27;action_id&#x27;: 13, &#x27;name&#x27;: &#x27;get_build_queue&#x27;, &#x27;description&#x27;: &#x27;Get Build Queue&#x27;, &#x27;service_id&#x27;: 3}, {&#x27;action_id&#x27;: 14, &#x27;name&#x27;: &#x27;get_results&#x27;, &#x27;description&#x27;: &#x27;Get Results&#x27;, &#x27;service_id&#x27;: 3}, {&#x27;action_id&#x27;: 15, &#x27;name&#x27;: &#x27;get_branch_results&#x27;, &#x27;description&#x27;: &#x27;Get Branch Results&#x27;, &#x27;service_id&#x27;: 3}, {&#x27;action_id&#x27;: 16, &#x27;name&#x27;: &#x27;get_projects&#x27;, &#x27;description&#x27;: &#x27;Get Projects&#x27;, &#x27;service_id&#x27;: 3}, {&#x27;action_id&#x27;: 17, &#x27;name&#x27;: &#x27;pause&#x27;, &#x27;description&#x27;: &#x27;Pause&#x27;, &#x27;service_id&#x27;: 3}, {&#x27;action_id&#x27;: 18, &#x27;name&#x27;: &#x27;resume&#x27;, &#x27;description&#x27;: &#x27;Resume&#x27;, &#x27;service_id&#x27;: 3}]}, {&#x27;service_id&#x27;: 5, &#x27;name&#x27;: &#x27;CHECKMARX&#x27;, &#x27;category&#x27;: &#x27;Tracking&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 20, &#x27;name&#x27;: &#x27;project_data&#x27;, &#x27;description&#x27;: &#x27;Project Data&#x27;, &#x27;service_id&#x27;: 5}, {&#x27;action_id&#x27;: 21, &#x27;name&#x27;: &#x27;project_info&#x27;, &#x27;description&#x27;: &#x27;Project Info&#x27;, &#x27;service_id&#x27;: 5}]}, {&#x27;service_id&#x27;: 10, &#x27;name&#x27;: &#x27;JIRA&#x27;, &#x27;category&#x27;: &#x27;Tracking&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 30, &#x27;name&#x27;: &#x27;create_issue&#x27;, &#x27;description&#x27;: &#x27;Create Issue&#x27;, &#x27;service_id&#x27;: 10}, {&#x27;action_id&#x27;: 31, &#x27;name&#x27;: &#x27;get_projects&#x27;, &#x27;description&#x27;: &#x27;Get Projects&#x27;, &#x27;service_id&#x27;: 10}, {&#x27;action_id&#x27;: 32, &#x27;name&#x27;: &#x27;get_issues&#x27;, &#x27;description&#x27;: &#x27;Get Issues&#x27;, &#x27;service_id&#x27;: 10}]}, {&#x27;service_id&#x27;: 20, &#x27;name&#x27;: &#x27;ServiceNow&#x27;, &#x27;category&#x27;: &#x27;Tracking&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 48, &#x27;name&#x27;: &#x27;create_incident&#x27;, &#x27;description&#x27;: &#x27;Create Incident&#x27;, &#x27;service_id&#x27;: 20}, {&#x27;action_id&#x27;: 49, &#x27;name&#x27;: &#x27;update_incident&#x27;, &#x27;description&#x27;: &#x27;Update Incident&#x27;, &#x27;service_id&#x27;: 20}]}]}, {&#x27;name&#x27;: &#x27;Execution&#x27;, &#x27;services&#x27;: [{&#x27;service_id&#x27;: 2, &#x27;name&#x27;: &#x27;Ansible&#x27;, &#x27;category&#x27;: &#x27;Execution&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 3, &#x27;name&#x27;: &#x27;run_playbook&#x27;, &#x27;description&#x27;: &#x27;Run Playbook&#x27;, &#x27;service_id&#x27;: 2}]}, {&#x27;service_id&#x27;: 9, &#x27;name&#x27;: &#x27;Jenkins&#x27;, &#x27;category&#x27;: &#x27;Execution&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 27, &#x27;name&#x27;: &#x27;build_job&#x27;, &#x27;description&#x27;: &#x27;Build Job&#x27;, &#x27;service_id&#x27;: 9}, {&#x27;action_id&#x27;: 28, &#x27;name&#x27;: &#x27;create_job&#x27;, &#x27;description&#x27;: &#x27;Create Job&#x27;, &#x27;service_id&#x27;: 9}, {&#x27;action_id&#x27;: 29, &#x27;name&#x27;: &#x27;clone_job&#x27;, &#x27;description&#x27;: &#x27;Clone Job&#x27;, &#x27;service_id&#x27;: 9}]}, {&#x27;service_id&#x27;: 11, &#x27;name&#x27;: &#x27;JMETER&#x27;, &#x27;category&#x27;: &#x27;Execution&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 33, &#x27;name&#x27;: &#x27;load_test&#x27;, &#x27;description&#x27;: &#x27;Load Test&#x27;, &#x27;service_id&#x27;: 11}]}, {&#x27;service_id&#x27;: 13, &#x27;name&#x27;: &#x27;Linux Script&#x27;, &#x27;category&#x27;: &#x27;Execution&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 36, &#x27;name&#x27;: &#x27;run_command&#x27;, &#x27;description&#x27;: &#x27;Run Command&#x27;, &#x27;service_id&#x27;: 13}, {&#x27;action_id&#x27;: 37, &#x27;name&#x27;: &#x27;run_script&#x27;, &#x27;description&#x27;: &#x27;Run Script&#x27;, &#x27;service_id&#x27;: 13}]}]}, {&#x27;name&#x27;: &#x27;Cloud Management&#x27;, &#x27;services&#x27;: [{&#x27;service_id&#x27;: 4, &#x27;name&#x27;: &#x27;CloudFormation Template&#x27;, &#x27;category&#x27;: &#x27;Cloud Management&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 19, &#x27;name&#x27;: &#x27;run_cft&#x27;, &#x27;description&#x27;: &#x27;Run Cft&#x27;, &#x27;service_id&#x27;: 4}]}, {&#x27;service_id&#x27;: 24, &#x27;name&#x27;: &#x27;Terraform&#x27;, &#x27;category&#x27;: &#x27;Cloud Management&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 55, &#x27;name&#x27;: &#x27;run_terraform&#x27;, &#x27;description&#x27;: &#x27;Run Terraform&#x27;, &#x27;service_id&#x27;: 24}]}]}, {&#x27;name&#x27;: &#x27;Container Platform&#x27;, &#x27;services&#x27;: [{&#x27;service_id&#x27;: 6, &#x27;name&#x27;: &#x27;Docker&#x27;, &#x27;category&#x27;: &#x27;Container Platform&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 22, &#x27;name&#x27;: &#x27;build_job&#x27;, &#x27;description&#x27;: &#x27;Build Job&#x27;, &#x27;service_id&#x27;: 6}, {&#x27;action_id&#x27;: 23, &#x27;name&#x27;: &#x27;pull_job&#x27;, &#x27;description&#x27;: &#x27;Pull Job&#x27;, &#x27;service_id&#x27;: 6}, {&#x27;action_id&#x27;: 24, &#x27;name&#x27;: &#x27;push_job&#x27;, &#x27;description&#x27;: &#x27;Push Job&#x27;, &#x27;service_id&#x27;: 6}]}, {&#x27;service_id&#x27;: 12, &#x27;name&#x27;: &#x27;Kubernetes&#x27;, &#x27;category&#x27;: &#x27;Container Platform&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 34, &#x27;name&#x27;: &#x27;create_cluster&#x27;, &#x27;description&#x27;: &#x27;Create Cluster&#x27;, &#x27;service_id&#x27;: 12}, {&#x27;action_id&#x27;: 35, &#x27;name&#x27;: &#x27;deploy_application&#x27;, &#x27;description&#x27;: &#x27;Deploy Application&#x27;, &#x27;service_id&#x27;: 12}]}, {&#x27;service_id&#x27;: 14, &#x27;name&#x27;: &#x27;Maven&#x27;, &#x27;category&#x27;: &#x27;Container Platform&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 38, &#x27;name&#x27;: &#x27;build_artifactory&#x27;, &#x27;description&#x27;: &#x27;Build Artifactory&#x27;, &#x27;service_id&#x27;: 14}]}]}, {&#x27;name&#x27;: &#x27;Version Control&#x27;, &#x27;services&#x27;: [{&#x27;service_id&#x27;: 7, &#x27;name&#x27;: &#x27;Git&#x27;, &#x27;category&#x27;: &#x27;Version Control&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 25, &#x27;name&#x27;: &#x27;commit_files&#x27;, &#x27;description&#x27;: &#x27;Commit Files&#x27;, &#x27;service_id&#x27;: 7}]}, {&#x27;service_id&#x27;: 23, &#x27;name&#x27;: &#x27;SVN&#x27;, &#x27;category&#x27;: &#x27;Version Control&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 54, &#x27;name&#x27;: &#x27;commit_files&#x27;, &#x27;description&#x27;: &#x27;Commit Files&#x27;, &#x27;service_id&#x27;: 23}]}]}, {&#x27;name&#x27;: &#x27;Middleware&#x27;, &#x27;services&#x27;: [{&#x27;service_id&#x27;: 8, &#x27;name&#x27;: &#x27;JBoss&#x27;, &#x27;category&#x27;: &#x27;Middleware&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 26, &#x27;name&#x27;: &#x27;deploy_application&#x27;, &#x27;description&#x27;: &#x27;Deploy Application&#x27;, &#x27;service_id&#x27;: 8}]}, {&#x27;service_id&#x27;: 25, &#x27;name&#x27;: &#x27;Tomcat&#x27;, &#x27;category&#x27;: &#x27;Middleware&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 56, &#x27;name&#x27;: &#x27;deploy_application&#x27;, &#x27;description&#x27;: &#x27;Deploy Application&#x27;, &#x27;service_id&#x27;: 25}]}, {&#x27;service_id&#x27;: 26, &#x27;name&#x27;: &#x27;WebLogic&#x27;, &#x27;category&#x27;: &#x27;Middleware&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 57, &#x27;name&#x27;: &#x27;deploy_application&#x27;, &#x27;description&#x27;: &#x27;Deploy Application&#x27;, &#x27;service_id&#x27;: 26}, {&#x27;action_id&#x27;: 58, &#x27;name&#x27;: &#x27;deploy_datasource&#x27;, &#x27;description&#x27;: &#x27;Deploy Datasource&#x27;, &#x27;service_id&#x27;: 26}, {&#x27;action_id&#x27;: 59, &#x27;name&#x27;: &#x27;jms_queue&#x27;, &#x27;description&#x27;: &#x27;Jms Queue&#x27;, &#x27;service_id&#x27;: 26}]}]}, {&#x27;name&#x27;: &#x27;Database&#x27;, &#x27;services&#x27;: [{&#x27;service_id&#x27;: 15, &#x27;name&#x27;: &#x27;MongoDB&#x27;, &#x27;category&#x27;: &#x27;Database&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 39, &#x27;name&#x27;: &#x27;create_tables&#x27;, &#x27;description&#x27;: &#x27;Create Tables&#x27;, &#x27;service_id&#x27;: 15}]}, {&#x27;service_id&#x27;: 16, &#x27;name&#x27;: &#x27;MySQL&#x27;, &#x27;category&#x27;: &#x27;Database&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 40, &#x27;name&#x27;: &#x27;run_query&#x27;, &#x27;description&#x27;: &#x27;Run Query&#x27;, &#x27;service_id&#x27;: 16}]}, {&#x27;service_id&#x27;: 17, &#x27;name&#x27;: &#x27;Oracle&#x27;, &#x27;category&#x27;: &#x27;Database&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 41, &#x27;name&#x27;: &#x27;run_query&#x27;, &#x27;description&#x27;: &#x27;Run Query&#x27;, &#x27;service_id&#x27;: 17}, {&#x27;action_id&#x27;: 42, &#x27;name&#x27;: &#x27;create_database&#x27;, &#x27;description&#x27;: &#x27;Create Database&#x27;, &#x27;service_id&#x27;: 17}, {&#x27;action_id&#x27;: 43, &#x27;name&#x27;: &#x27;delete_database&#x27;, &#x27;description&#x27;: &#x27;Delete Database&#x27;, &#x27;service_id&#x27;: 17}, {&#x27;action_id&#x27;: 44, &#x27;name&#x27;: &#x27;run_script&#x27;, &#x27;description&#x27;: &#x27;Run Script&#x27;, &#x27;service_id&#x27;: 17}]}, {&#x27;service_id&#x27;: 18, &#x27;name&#x27;: &#x27;PostgreSQL&#x27;, &#x27;category&#x27;: &#x27;Database&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 45, &#x27;name&#x27;: &#x27;create_tables&#x27;, &#x27;description&#x27;: &#x27;Create Tables&#x27;, &#x27;service_id&#x27;: 18}]}]}, {&#x27;name&#x27;: &#x27;Web Hook&#x27;, &#x27;services&#x27;: [{&#x27;service_id&#x27;: 19, &#x27;name&#x27;: &#x27;REST WebHook&#x27;, &#x27;category&#x27;: &#x27;Web Hook&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 46, &#x27;name&#x27;: &#x27;get&#x27;, &#x27;description&#x27;: &#x27;Get&#x27;, &#x27;service_id&#x27;: 19}, {&#x27;action_id&#x27;: 47, &#x27;name&#x27;: &#x27;post&#x27;, &#x27;description&#x27;: &#x27;Post&#x27;, &#x27;service_id&#x27;: 19}]}]}, {&#x27;name&#x27;: &#x27;Code Quality&#x27;, &#x27;services&#x27;: [{&#x27;service_id&#x27;: 21, &#x27;name&#x27;: &#x27;SonarQube&#x27;, &#x27;category&#x27;: &#x27;Code Quality&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 50, &#x27;name&#x27;: &#x27;get_rules&#x27;, &#x27;description&#x27;: &#x27;Get Rules&#x27;, &#x27;service_id&#x27;: 21}, {&#x27;action_id&#x27;: 51, &#x27;name&#x27;: &#x27;get_metrics&#x27;, &#x27;description&#x27;: &#x27;Get Metrics&#x27;, &#x27;service_id&#x27;: 21}]}, {&#x27;service_id&#x27;: 22, &#x27;name&#x27;: &#x27;StaticCode Analysis&#x27;, &#x27;category&#x27;: &#x27;Code Quality&#x27;, &#x27;comments&#x27;: &#x27;1.0;Matilda&#x27;, &#x27;actions&#x27;: [{&#x27;action_id&#x27;: 52, &#x27;name&#x27;: &#x27;run_job&#x27;, &#x27;description&#x27;: &#x27;Run Job&#x27;, &#x27;service_id&#x27;: 22}, {&#x27;action_id&#x27;: 53, &#x27;name&#x27;: &#x27;generate_report&#x27;, &#x27;description&#x27;: &#x27;Generate Report&#x27;, &#x27;service_id&#x27;: 22}]}]}, {&#x27;name&#x27;: &#x27;max_stringv&#x27;, &#x27;services&#x27;: [{&#x27;service_id&#x27;: 27, &#x27;name&#x27;: &#x27;mex_stringv&#x27;, &#x27;category&#x27;: &#x27;max_stringv&#x27;, &#x27;comments&#x27;: &#x27;max_stringv&#x27;, &#x27;actions&#x27;: []}, {&#x27;service_id&#x27;: 28, &#x27;name&#x27;: &#x27;mex_stringv&#x27;, &#x27;category&#x27;: &#x27;max_stringv&#x27;, &#x27;comments&#x27;: &#x27;max_stringv&#x27;, &#x27;actions&#x27;: []}, {&#x27;service_id&#x27;: 29, &#x27;name&#x27;: &#x27;mex_stringv&#x27;, &#x27;category&#x27;: &#x27;max_stringv&#x27;, &#x27;comments&#x27;: &#x27;max_stringv&#x27;, &#x27;actions&#x27;: []}, {&#x27;service_id&#x27;: 31, &#x27;name&#x27;: &#x27;mex_stringv&#x27;, &#x27;category&#x27;: &#x27;max_stringv&#x27;, &#x27;comments&#x27;: &#x27;max_stringv&#x27;, &#x27;actions&#x27;: []}, {&#x27;service_id&#x27;: 32, &#x27;name&#x27;: &#x27;mex_stringv&#x27;, &#x27;category&#x27;: &#x27;max_stringv&#x27;, &#x27;comments&#x27;: &#x27;max_stringv&#x27;, &#x27;actions&#x27;: []}, {&#x27;service_id&#x27;: 33, &#x27;name&#x27;: &#x27;mex_stringv&#x27;, &#x27;category&#x27;: &#x27;max_stringv&#x27;, &#x27;comments&#x27;: &#x27;max_stringv&#x27;, &#x27;actions&#x27;: []}]}, {&#x27;name&#x27;: &#x27;msax_stringv&#x27;, &#x27;services&#x27;: [{&#x27;service_id&#x27;: 30, &#x27;name&#x27;: &#x27;mex_stringv&#x27;, &#x27;category&#x27;: &#x27;msax_stringv&#x27;, &#x27;comments&#x27;: &#x27;max_stringv&#x27;, &#x27;actions&#x27;: []}]}]
+------------------------------ Captured log call -------------------------------<br/>cfg.py                    2843 WARNING  Config option database.idle_timeout  is deprecated. Use option database.connection_recycle_time instead.
+engines.py                 130 WARNING  URL mysql://matilda:***@34.221.113.215/release_management does not contain a &#x27;+drivername&#x27; portion, and will make use of a default driver.  A full dbname+drivername:// protocol is recommended. For MySQL, it is strongly recommended that mysql+pymysql:// be specified for maximum service compatibility</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">matilda_release/test/functional_testing/test_service.py::test_post_service</td>
+          <td class="col-duration">0.43</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">matilda_release/test/functional_testing/test_service.py::test_get_service_id_actions</td>
+          <td class="col-duration">0.42</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">----------------------------- Captured stdout call -----------------------------<br/>Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT actions.action_id AS actions_action_id, actions.name AS actions_name, actions.description AS actions_description, actions.service_id AS actions_service_id 
+FROM actions 
+WHERE actions.action_id = %s
+</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">matilda_release/test/functional_testing/test_service.py::test_post_service_id_actions</td>
+          <td class="col-duration">0.44</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">matilda_release/test/functional_testing/test_service.py::test_get_services_action_fields</td>
+          <td class="col-duration">0.43</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">----------------------------- Captured stdout call -----------------------------<br/>Filters None
+name &lt;function get_session at 0x00000074A9FCAD90&gt;
+SELECT service_fields.service_field_id AS service_fields_service_field_id, service_fields.`key` AS service_fields_key, service_fields.label AS service_fields_label, service_fields.placeholder AS service_fields_placeholder, service_fields.control_type AS service_fields_control_type, service_fields.required AS service_fields_required, service_fields.`order` AS service_fields_order, service_fields.options AS service_fields_options, service_fields.field_type AS service_fields_field_type, service_fields.description AS service_fields_description, service_fields.service_id AS service_fields_service_id, service_fields.action_id AS service_fields_action_id 
+FROM service_fields 
+WHERE service_fields.service_id = %s AND service_fields.action_id = %s
+control type TextBox
+options None
+svf {&#x27;service_field_id&#x27;: 1, &#x27;key&#x27;: &#x27;apitype&#x27;, &#x27;label&#x27;: &#x27;API Type&#x27;, &#x27;placeholder&#x27;: &#x27;API Type&#x27;, &#x27;control_type&#x27;: &#x27;TextBox&#x27;, &#x27;required&#x27;: True, &#x27;order&#x27;: 1, &#x27;options&#x27;: &#x27;None&#x27;, &#x27;field_type&#x27;: &#x27;input&#x27;, &#x27;description&#x27;: &#x27;API Type&#x27;, &#x27;service_id&#x27;: 1, &#x27;action_id&#x27;: 1, &#x27;controlType&#x27;: &#x27;TextBox&#x27;}
+control type TextBox
+options None
+svf {&#x27;service_field_id&#x27;: 2, &#x27;key&#x27;: &#x27;url&#x27;, &#x27;label&#x27;: &#x27;URL&#x27;, &#x27;placeholder&#x27;: &#x27;Jenkins URL&#x27;, &#x27;control_type&#x27;: &#x27;TextBox&#x27;, &#x27;required&#x27;: True, &#x27;order&#x27;: 2, &#x27;options&#x27;: &#x27;None&#x27;, &#x27;field_type&#x27;: &#x27;input&#x27;, &#x27;description&#x27;: &#x27;URL&#x27;, &#x27;service_id&#x27;: 1, &#x27;action_id&#x27;: 1, &#x27;controlType&#x27;: &#x27;TextBox&#x27;}
+control type TextBox
+options None
+svf {&#x27;service_field_id&#x27;: 3, &#x27;key&#x27;: &#x27;user&#x27;, &#x27;label&#x27;: &#x27;Username&#x27;, &#x27;placeholder&#x27;: &#x27;Username&#x27;, &#x27;control_type&#x27;: &#x27;TextBox&#x27;, &#x27;required&#x27;: True, &#x27;order&#x27;: 3, &#x27;options&#x27;: &#x27;None&#x27;, &#x27;field_type&#x27;: &#x27;input&#x27;, &#x27;description&#x27;: &#x27;Username&#x27;, &#x27;service_id&#x27;: 1, &#x27;action_id&#x27;: 1, &#x27;controlType&#x27;: &#x27;TextBox&#x27;}
+control type Password
+options None
+svf {&#x27;service_field_id&#x27;: 4, &#x27;key&#x27;: &#x27;password&#x27;, &#x27;label&#x27;: &#x27;Password&#x27;, &#x27;placeholder&#x27;: &#x27;Password&#x27;, &#x27;control_type&#x27;: &#x27;Password&#x27;, &#x27;required&#x27;: True, &#x27;order&#x27;: 4, &#x27;options&#x27;: &#x27;None&#x27;, &#x27;field_type&#x27;: &#x27;input&#x27;, &#x27;description&#x27;: &#x27;Password&#x27;, &#x27;service_id&#x27;: 1, &#x27;action_id&#x27;: 1, &#x27;controlType&#x27;: &#x27;Password&#x27;}
+field resp [{&#x27;service_field_id&#x27;: 1, &#x27;key&#x27;: &#x27;apitype&#x27;, &#x27;label&#x27;: &#x27;API Type&#x27;, &#x27;placeholder&#x27;: &#x27;API Type&#x27;, &#x27;control_type&#x27;: &#x27;TextBox&#x27;, &#x27;required&#x27;: True, &#x27;order&#x27;: 1, &#x27;options&#x27;: &#x27;None&#x27;, &#x27;field_type&#x27;: &#x27;input&#x27;, &#x27;description&#x27;: &#x27;API Type&#x27;, &#x27;service_id&#x27;: 1, &#x27;action_id&#x27;: 1, &#x27;controlType&#x27;: &#x27;TextBox&#x27;}, {&#x27;service_field_id&#x27;: 2, &#x27;key&#x27;: &#x27;url&#x27;, &#x27;label&#x27;: &#x27;URL&#x27;, &#x27;placeholder&#x27;: &#x27;Jenkins URL&#x27;, &#x27;control_type&#x27;: &#x27;TextBox&#x27;, &#x27;required&#x27;: True, &#x27;order&#x27;: 2, &#x27;options&#x27;: &#x27;None&#x27;, &#x27;field_type&#x27;: &#x27;input&#x27;, &#x27;description&#x27;: &#x27;URL&#x27;, &#x27;service_id&#x27;: 1, &#x27;action_id&#x27;: 1, &#x27;controlType&#x27;: &#x27;TextBox&#x27;}, {&#x27;service_field_id&#x27;: 3, &#x27;key&#x27;: &#x27;user&#x27;, &#x27;label&#x27;: &#x27;Username&#x27;, &#x27;placeholder&#x27;: &#x27;Username&#x27;, &#x27;control_type&#x27;: &#x27;TextBox&#x27;, &#x27;required&#x27;: True, &#x27;order&#x27;: 3, &#x27;options&#x27;: &#x27;None&#x27;, &#x27;field_type&#x27;: &#x27;input&#x27;, &#x27;description&#x27;: &#x27;Username&#x27;, &#x27;service_id&#x27;: 1, &#x27;action_id&#x27;: 1, &#x27;controlType&#x27;: &#x27;TextBox&#x27;}, {&#x27;service_field_id&#x27;: 4, &#x27;key&#x27;: &#x27;password&#x27;, &#x27;label&#x27;: &#x27;Password&#x27;, &#x27;placeholder&#x27;: &#x27;Password&#x27;, &#x27;control_type&#x27;: &#x27;Password&#x27;, &#x27;required&#x27;: True, &#x27;order&#x27;: 4, &#x27;options&#x27;: &#x27;None&#x27;, &#x27;field_type&#x27;: &#x27;input&#x27;, &#x27;description&#x27;: &#x27;Password&#x27;, &#x27;service_id&#x27;: 1, &#x27;action_id&#x27;: 1, &#x27;controlType&#x27;: &#x27;Password&#x27;}]
+</div></td></tr></tbody></table></body></html>
